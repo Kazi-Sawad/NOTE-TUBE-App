@@ -1,0 +1,6 @@
+{
+  "name": "NoteTube",
+  "description": "Convert YouTube videos into structured AI notes, summaries, bullet points, and actionable insights.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
