@@ -123,22 +123,33 @@ class NoteTubeViewModel(application: Application) : AndroidViewModel(application
                     YouTubeHelper.fetchVideoMetadata(videoId)
                 }
 
+                val combinedContext = buildString {
+                    if (additionalContext.isNotBlank()) {
+                        append(additionalContext.trim())
+                    }
+                    if (metadata.descriptionOrTranscript.isNotBlank()) {
+                        if (isNotEmpty()) append("\n\n")
+                        append("Real Video Transcript / Spoken Content:\n")
+                        append(metadata.descriptionOrTranscript.take(2000))
+                    }
+                }
+
                 val result = if (shouldRunOffline) {
-                    _generationState.value = GenerationUiState.Loading("Synthesizing deep conceptual notes (Offline Mode)...")
+                    _generationState.value = GenerationUiState.Loading("Synthesizing humanized notes (Offline Mode)...")
                     OfflineNotesGenerator.generateInDepthOfflineNotes(
                         videoId = videoId,
                         rawTitle = metadata.title,
                         channel = metadata.channel,
-                        userContext = additionalContext
+                        userContext = combinedContext
                     )
                 } else {
-                    _generationState.value = GenerationUiState.Loading("Synthesizing in-depth AI analysis & broad concepts...")
+                    _generationState.value = GenerationUiState.Loading("Synthesizing humanized AI analysis from video data...")
                     GeminiService.generateVideoNotes(
                         videoUrl = metadata.canonicalUrl,
                         videoId = metadata.videoId,
                         videoTitle = metadata.title,
                         channelName = metadata.channel,
-                        userProvidedContext = additionalContext
+                        userProvidedContext = combinedContext
                     )
                 }
 

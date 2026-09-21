@@ -14,7 +14,8 @@ data class YouTubeMetadata(
     val title: String,
     val channel: String,
     val thumbnailUrl: String,
-    val isRecognized: Boolean
+    val isRecognized: Boolean,
+    val descriptionOrTranscript: String = ""
 )
 
 object YouTubeHelper {
@@ -77,7 +78,10 @@ object YouTubeHelper {
     suspend fun fetchVideoMetadata(videoId: String): YouTubeMetadata = withContext(Dispatchers.IO) {
         val canonicalUrl = getCanonicalUrl(videoId)
         val defaultThumbnail = getThumbnailUrl(videoId)
+        var scrapedTitle = ""
+        var scrapedChannel = ""
 
+        // 1. Primary: Try YouTube oEmbed API for official video title & creator name
         try {
             val oembedUrl = "https://www.youtube.com/oembed?url=$canonicalUrl&format=json"
             val request = Request.Builder()
@@ -95,30 +99,121 @@ object YouTubeHelper {
                     val thumbnail = json.optString("thumbnail_url", defaultThumbnail)
 
                     if (rawTitle.isNotBlank()) {
+                        scrapedTitle = rawTitle
+                        scrapedChannel = if (rawChannel.isNotBlank()) rawChannel else "YouTube Creator"
+
+                        // Also attempt to fetch video subtitles/captions or page description snippet
+                        val captionsOrDescription = fetchVideoCaptionsSnippet(videoId)
+
                         return@withContext YouTubeMetadata(
                             videoId = videoId,
                             canonicalUrl = canonicalUrl,
-                            title = rawTitle,
-                            channel = if (rawChannel.isNotBlank()) rawChannel else "YouTube Creator",
+                            title = scrapedTitle,
+                            channel = scrapedChannel,
                             thumbnailUrl = thumbnail,
-                            isRecognized = true
+                            isRecognized = true,
+                            descriptionOrTranscript = captionsOrDescription
                         )
                     }
+                }
+            }
+        } catch (_: Exception) {
+            // Handled gracefully by falling back to page scraper
+        }
+
+        // 2. Secondary: Fallback to HTML meta tags scraping if oEmbed fails or is blocked
+        try {
+            val pageRequest = Request.Builder()
+                .url(canonicalUrl)
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+                .build()
+
+            val pageResponse = okHttpClient.newCall(pageRequest).execute()
+            if (pageResponse.isSuccessful) {
+                val html = pageResponse.body?.string() ?: ""
+                val titlePattern = Pattern.compile("<title>(.*?)</title>", Pattern.CASE_INSENSITIVE)
+                val matcher = titlePattern.matcher(html)
+                if (matcher.find()) {
+                    val raw = matcher.group(1)?.replace("- YouTube", "")?.trim() ?: ""
+                    if (raw.isNotBlank() && raw != "YouTube") {
+                        scrapedTitle = raw
+                    }
+                }
+
+                val authorPattern = Pattern.compile("<link itemprop=\"name\" content=\"(.*?)\">")
+                val authorMatcher = authorPattern.matcher(html)
+                if (authorMatcher.find()) {
+                    scrapedChannel = authorMatcher.group(1)?.trim() ?: ""
+                }
+
+                if (scrapedTitle.isNotBlank()) {
+                    val captions = fetchVideoCaptionsSnippet(videoId)
+                    return@withContext YouTubeMetadata(
+                        videoId = videoId,
+                        canonicalUrl = canonicalUrl,
+                        title = scrapedTitle,
+                        channel = if (scrapedChannel.isNotBlank()) scrapedChannel else "YouTube Creator",
+                        thumbnailUrl = defaultThumbnail,
+                        isRecognized = true,
+                        descriptionOrTranscript = captions
+                    )
                 }
             }
         } catch (_: Exception) {
             // Handled gracefully below
         }
 
-        // Default metadata when oEmbed is restricted or unavailable;
-        // Gemini will identify and ground the actual content using the videoId and URL
+        // 3. Fallback when network is offline or video is restricted
         YouTubeMetadata(
             videoId = videoId,
             canonicalUrl = canonicalUrl,
-            title = "",
-            channel = "",
+            title = scrapedTitle,
+            channel = scrapedChannel,
             thumbnailUrl = defaultThumbnail,
-            isRecognized = false
+            isRecognized = scrapedTitle.isNotBlank(),
+            descriptionOrTranscript = ""
         )
+    }
+
+    /**
+     * Attempts to fetch real transcript / timed captions lines from YouTube's timedtext endpoint.
+     */
+    private fun fetchVideoCaptionsSnippet(videoId: String): String {
+        return try {
+            val timedTextUrl = "https://www.youtube.com/api/timedtext?lang=en&v=$videoId"
+            val request = Request.Builder()
+                .url(timedTextUrl)
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .build()
+
+            val response = okHttpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val xml = response.body?.string() ?: ""
+                if (xml.contains("<text")) {
+                    val pattern = Pattern.compile("<text[^>]*>(.*?)</text>")
+                    val matcher = pattern.matcher(xml)
+                    val lines = mutableListOf<String>()
+                    var count = 0
+                    while (matcher.find() && count < 60) {
+                        val text = matcher.group(1)
+                            ?.replace("&amp;", "&")
+                            ?.replace("&quot;", "\"")
+                            ?.replace("&#39;", "'")
+                            ?.replace("&lt;", "<")
+                            ?.replace("&gt;", ">")
+                            ?.trim()
+                        if (!text.isNullOrBlank()) {
+                            lines.add(text)
+                            count++
+                        }
+                    }
+                    if (lines.isNotEmpty()) {
+                        lines.joinToString(" ")
+                    } else ""
+                } else ""
+            } else ""
+        } catch (_: Exception) {
+            ""
+        }
     }
 }
