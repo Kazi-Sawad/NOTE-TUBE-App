@@ -30,17 +30,23 @@ import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.SmartDisplay
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -70,6 +76,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.example.data.model.NoteLanguage
+import com.example.data.model.NoteMode
 import com.example.data.remote.OfflineNotesGenerator
 import com.example.data.remote.YouTubeHelper
 import com.example.ui.components.NoteTubeBrandLogo
@@ -109,14 +117,19 @@ val PRESET_SAMPLES = listOf(
 fun GenerateNoteSheet(
     sheetState: SheetState,
     generationState: GenerationUiState,
+    selectedLanguage: NoteLanguage,
+    selectedMode: NoteMode,
+    onLanguageSelected: (NoteLanguage) -> Unit,
+    onModeSelected: (NoteMode) -> Unit,
     onDismiss: () -> Unit,
-    onGenerate: (url: String, context: String, forceOffline: Boolean) -> Unit,
+    onGenerate: (url: String, context: String, forceOffline: Boolean, language: NoteLanguage, mode: NoteMode) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     var urlInput by remember { mutableStateOf("") }
     var contextInput by remember { mutableStateOf("") }
     var isContextExpanded by remember { mutableStateOf(false) }
+    var languageDropdownExpanded by remember { mutableStateOf(false) }
 
     val isOnline = remember { OfflineNotesGenerator.isOnline(context) }
     var useOfflineMode by remember { mutableStateOf(!isOnline) }
@@ -134,14 +147,14 @@ fun GenerateNoteSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp)
+                .padding(horizontal = 22.dp)
                 .padding(bottom = 36.dp)
                 .verticalScroll(rememberScrollState())
         ) {
             // Header with custom 3D brand token
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(bottom = 18.dp)
+                modifier = Modifier.padding(bottom = 16.dp)
             ) {
                 NoteTubeBrandLogo(size = 44.dp, animatedGlow = true)
                 Spacer(modifier = Modifier.width(14.dp))
@@ -154,18 +167,109 @@ fun GenerateNoteSheet(
                         letterSpacing = (-0.3).sp
                     )
                     Text(
-                        text = "Extract executable programs, math proofs & deep concepts",
+                        text = "Exam-grade tutorials, code, proofs & multilingual synthesis",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
+            // Language Selector Pill
+            ExposedDropdownMenuBox(
+                expanded = languageDropdownExpanded,
+                onExpandedChange = { languageDropdownExpanded = it }
+            ) {
+                OutlinedTextField(
+                    value = "${selectedLanguage.flag} ${selectedLanguage.displayName} (${selectedLanguage.nativeName})",
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Note Language") },
+                    leadingIcon = {
+                        Icon(Icons.Default.Language, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = languageDropdownExpanded) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                    )
+                )
+
+                ExposedDropdownMenu(
+                    expanded = languageDropdownExpanded,
+                    onDismissRequest = { languageDropdownExpanded = false }
+                ) {
+                    NoteLanguage.entries.forEach { lang ->
+                        DropdownMenuItem(
+                            text = {
+                                Text("${lang.flag} ${lang.displayName} — ${lang.nativeName}")
+                            },
+                            onClick = {
+                                onLanguageSelected(lang)
+                                languageDropdownExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Study Mode Selector
+            Text(
+                text = "STUDY & SYNTHESIS MODE",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                letterSpacing = 0.5.sp,
+                modifier = Modifier.padding(start = 2.dp, bottom = 6.dp)
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                NoteMode.entries.forEach { mode ->
+                    val isSelected = selectedMode == mode
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { onModeSelected(mode) },
+                        label = {
+                            Text(
+                                text = when (mode) {
+                                    NoteMode.EXAM_TUTORIAL -> "Exam & Tutorial"
+                                    NoteMode.STANDARD_COMPREHENSIVE -> "Full Code & Proofs"
+                                    NoteMode.QUICK_RECAP -> "Quick Recap"
+                                },
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = 11.sp
+                            )
+                        },
+                        leadingIcon = {
+                            if (mode == NoteMode.EXAM_TUTORIAL) {
+                                Icon(Icons.Default.School, contentDescription = null, modifier = Modifier.size(13.dp))
+                            }
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        shape = RoundedCornerShape(100.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
             // Offline Mode Toggle Pill
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 16.dp),
+                    .padding(bottom = 14.dp),
                 shape = RoundedCornerShape(12.dp),
                 color = if (useOfflineMode) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                 border = BorderStroke(1.dp, if (useOfflineMode) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outlineVariant)
@@ -190,13 +294,13 @@ fun GenerateNoteSheet(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = if (useOfflineMode) "Offline Generation Mode" else "Online AI Mode",
+                                text = if (useOfflineMode) "Offline Synthesis Mode" else "Online High-Efficiency AI",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = if (useOfflineMode) "Generates deep conceptual notes 100% on-device (no internet needed)" else "Uses Gemini 3.5 Flash cloud intelligence",
+                                text = if (useOfflineMode) "Generates full notes 100% on-device (no internet needed)" else "Grounded in real video transcripts & Gemini AI",
                                 style = MaterialTheme.typography.bodySmall,
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -303,7 +407,7 @@ fun GenerateNoteSheet(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = if (useOfflineMode) "Ready for Offline Synthesis" else "Ready to analyze",
+                                    text = "Ready to synthesize for Exam & Tutorial",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.SemiBold
@@ -321,7 +425,7 @@ fun GenerateNoteSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             // Quick preset pills
             Text(
@@ -338,53 +442,54 @@ fun GenerateNoteSheet(
             ) {
                 PRESET_SAMPLES.forEach { sample ->
                     SuggestionChip(
-                        onClick = {
-                            urlInput = sample.url
-                        },
+                        onClick = { urlInput = sample.url },
                         label = {
                             Text(
-                                sample.title,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface
+                                text = sample.title,
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        },
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Default.SmartDisplay,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp)
                             )
                         },
                         colors = SuggestionChipDefaults.suggestionChipColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            containerColor = MaterialTheme.colorScheme.surface
                         ),
-                        border = null,
-                        shape = RoundedCornerShape(8.dp)
+                        border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant),
+                        shape = RoundedCornerShape(100.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // Optional custom notes/transcript accordion
-            Surface(
+            // Advanced transcript / focus prompt toggle
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .clickable { isContextExpanded = !isContextExpanded },
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                shape = RoundedCornerShape(12.dp)
+                    .clickable { isContextExpanded = !isContextExpanded }
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Add transcript or focus topic (optional)",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Icon(
-                        imageVector = if (isContextExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+                Text(
+                    text = "Custom Exam Focus / Chapters (Optional)",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Icon(
+                    imageVector = if (isContextExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
             }
 
             AnimatedVisibility(visible = isContextExpanded) {
@@ -394,7 +499,7 @@ fun GenerateNoteSheet(
                         onValueChange = { contextInput = it },
                         placeholder = {
                             Text(
-                                "Focus on a specific chapter, topic, or paste transcript...",
+                                "e.g., Focus on Midterm Chapter 3 questions, algorithm proofs, or paste transcript...",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                             )
@@ -415,7 +520,7 @@ fun GenerateNoteSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             // Error Message if any
             if (generationState is GenerationUiState.Error) {
@@ -441,7 +546,7 @@ fun GenerateNoteSheet(
             Button(
                 onClick = {
                     if (urlInput.isNotBlank()) {
-                        onGenerate(urlInput, contextInput, useOfflineMode)
+                        onGenerate(urlInput, contextInput, useOfflineMode, selectedLanguage, selectedMode)
                     }
                 },
                 enabled = urlInput.isNotBlank() && !isLoading,
@@ -483,7 +588,7 @@ fun GenerateNoteSheet(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (useOfflineMode) "Generate Notes (Offline)" else "Generate Notes (AI)",
+                            text = "Generate ${selectedLanguage.flag} ${selectedMode.title}",
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.SemiBold
                         )

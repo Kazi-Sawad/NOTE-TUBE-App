@@ -32,19 +32,22 @@ object OfflineNotesGenerator {
         videoId: String,
         rawTitle: String,
         channel: String,
-        userContext: String
+        userContext: String,
+        language: com.example.data.model.NoteLanguage = com.example.data.model.NoteLanguage.ENGLISH,
+        mode: com.example.data.model.NoteMode = com.example.data.model.NoteMode.EXAM_TUTORIAL
     ): GeneratedNoteResult {
         val topic = deriveTopicTitle(rawTitle, videoId, userContext)
         val creator = if (channel.isNotBlank() && channel != "YouTube Creator") channel else "Subject Masterclass"
         val domain = detectDomain(topic, userContext)
 
-        val summary = buildInDepthSummary(topic, creator, domain, userContext)
+        val langPrefix = if (language != com.example.data.model.NoteLanguage.ENGLISH) "[${language.displayName} Edition] " else ""
+        val summary = langPrefix + buildInDepthSummary(topic, creator, domain, userContext)
         val keyTakeaways = buildBroadKeyTakeaways(topic, domain, userContext)
-        val structuredBullets = buildBroadDeepDiveSections(topic, creator, domain, userContext)
+        val structuredBullets = buildBroadDeepDiveSections(topic, creator, domain, userContext, mode)
         val actionItems = buildActionableImplementationPlan(topic, domain)
 
         return GeneratedNoteResult(
-            title = topic,
+            title = "$langPrefix$topic",
             channel = creator,
             category = domain.categoryName,
             summary = summary,
@@ -52,6 +55,28 @@ object OfflineNotesGenerator {
             structuredBullets = structuredBullets,
             actionItems = actionItems
         )
+    }
+
+    private fun buildBroadDeepDiveSections(
+        topic: String,
+        creator: String,
+        domain: KnowledgeDomain,
+        userContext: String,
+        mode: com.example.data.model.NoteMode
+    ): List<StructuredSection> {
+        val baseSections = buildBroadDeepDiveSections(topic, creator, domain, userContext)
+        if (mode == com.example.data.model.NoteMode.EXAM_TUTORIAL) {
+            val examSection = StructuredSection(
+                heading = "5. High-Probability Exam Questions & Review Cheatsheet",
+                points = listOf(
+                    "Q: What is the primary theoretical foundation behind $topic? A: Review Section 1 key definitions and axioms.",
+                    "Common Exam Trap: Misinterpreting edge conditions or omitting units/boundary states during written problems.",
+                    "Quick Review Formula / Core Rule: Keep fundamental mechanics accessible for rapid recall during timed assessments."
+                )
+            )
+            return baseSections + examSection
+        }
+        return baseSections
     }
 
     private fun deriveTopicTitle(rawTitle: String, videoId: String, userContext: String): String {

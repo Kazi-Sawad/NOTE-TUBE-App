@@ -41,4 +41,11 @@ class ExampleRobolectricTest {
     val videoId = YouTubeHelper.extractVideoId(url)
     assertEquals("dQw4w9WgXcQ", videoId)
   }
+
+  @Test
+  fun `launch MainActivity successfully`() {
+    val controller = org.robolectric.Robolectric.buildActivity(MainActivity::class.java)
+    val activity = controller.setup().get()
+    assertNotNull(activity)
+  }
 }
